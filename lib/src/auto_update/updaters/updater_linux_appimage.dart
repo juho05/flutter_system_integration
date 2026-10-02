@@ -7,7 +7,7 @@ import 'package:flutter_system_integration/src/version/version.dart';
 
 final _log = createLogger("UpdaterLinuxAppImage");
 
-class UpdaterLinuxAppImage implements Updater {
+class UpdaterLinuxAppImage extends Updater {
   final String _appName;
 
   UpdaterLinuxAppImage({required this._appName});

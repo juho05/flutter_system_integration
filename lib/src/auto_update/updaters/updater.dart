@@ -6,6 +6,13 @@ abstract class Updater {
   Future<String> generateDownloadFileName(Version version);
 
   Future<void> install(File downloadedFile);
+
+  /// Whether the user has to grant a permission before [install] can succeed.
+  Future<bool> needsInstallPermission() async => false;
+
+  /// Asks the user to grant the install permission. Returns whether it was
+  /// granted.
+  Future<bool> requestInstallPermission() async => true;
 }
 
 class NonZeroExitException implements Exception {

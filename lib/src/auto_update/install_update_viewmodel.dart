@@ -14,6 +14,10 @@ class InstallUpdateViewModel extends ChangeNotifier {
     _repo.addListener(notifyListeners);
   }
 
+  Future<bool> needsInstallPermission() => _repo.needsInstallPermission();
+
+  Future<bool> requestInstallPermission() => _repo.requestInstallPermission();
+
   Future<void> installUpdate() async {
     await _repo.update();
   }

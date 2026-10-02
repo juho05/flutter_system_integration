@@ -21,7 +21,7 @@ class AndroidUpdateFailedException implements Exception {
       "AndroidUpdateFailedException: $message${status != null ? " (status $status)" : ""}";
 }
 
-class UpdaterAndroid implements Updater {
+class UpdaterAndroid extends Updater {
   static const _defaultArch = "arm64v8";
   static const _channel = MethodChannel(
     "flutter_system_integration/apk_installer",
@@ -49,12 +49,17 @@ class UpdaterAndroid implements Updater {
   }
 
   @override
+  Future<bool> needsInstallPermission() async =>
+      await _channel.invokeMethod<bool>("hasInstallPermission") != true;
+
+  @override
+  Future<bool> requestInstallPermission() async =>
+      await _channel.invokeMethod<bool>("requestInstallPermission") == true;
+
+  @override
   Future<void> install(File downloadedFile) async {
     try {
-      final granted = await _channel.invokeMethod<bool>(
-        "requestInstallPermission",
-      );
-      if (granted != true) {
+      if (!await requestInstallPermission()) {
         throw AndroidUpdateFailedException(
           "User declined APK install permission",
         );

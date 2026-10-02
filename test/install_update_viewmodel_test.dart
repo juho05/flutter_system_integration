@@ -61,6 +61,24 @@ void main() {
     });
   });
 
+  group('install permission', () {
+    test('needsInstallPermission delegates to repo', () async {
+      when(() => repo.needsInstallPermission()).thenAnswer((_) async => true);
+      final vm = buildViewModel();
+      expect(await vm.needsInstallPermission(), isTrue);
+      vm.dispose();
+    });
+
+    test('requestInstallPermission delegates to repo', () async {
+      when(
+        () => repo.requestInstallPermission(),
+      ).thenAnswer((_) async => false);
+      final vm = buildViewModel();
+      expect(await vm.requestInstallPermission(), isFalse);
+      vm.dispose();
+    });
+  });
+
   group('installUpdate', () {
     test('delegates to repo.update', () async {
       when(() => repo.update()).thenAnswer((_) async {});

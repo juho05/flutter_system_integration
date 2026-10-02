@@ -110,7 +110,7 @@ internal class ApkInstaller(private val context: Context) : PluginRegistry.Activ
         return true
     }
 
-    private fun canRequestPackageInstalls(): Boolean =
+    fun canRequestPackageInstalls(): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.O || context.packageManager.canRequestPackageInstalls()
 
     /** Responds with the used method, `session` or `intent`. */

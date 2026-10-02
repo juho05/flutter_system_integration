@@ -39,6 +39,7 @@ class FlutterSystemIntegrationPlugin : FlutterPlugin, ActivityAware, MethodChann
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
+            "hasInstallPermission" -> result.success(installer.canRequestPackageInstalls())
             "requestInstallPermission" -> installer.requestInstallPermission(result)
             "install" -> {
                 val path = call.argument<String>("path")

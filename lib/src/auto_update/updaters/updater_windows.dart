@@ -6,7 +6,7 @@ import 'package:flutter_system_integration/src/version/version.dart';
 
 final _log = createLogger("UpdaterWindows");
 
-class UpdaterWindows implements Updater {
+class UpdaterWindows extends Updater {
   final String _appName;
 
   UpdaterWindows({required this._appName});

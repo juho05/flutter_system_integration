@@ -22,7 +22,7 @@ Auto updates download release assets from the GitHub release of the latest tag. 
 
 ## Android
 
-Auto updates require the app to declare the `REQUEST_INSTALL_PACKAGES` permission in its manifest. The package does not add it, so builds for stores that forbid it can leave it out. Updates are installed with the `PackageInstaller` session API. On MIUI and HyperOS with MIUI optimization enabled, which breaks that API, the APK is opened in the system installer instead.
+Auto updates require the app to declare the `REQUEST_INSTALL_PACKAGES` permission in its manifest. The package does not add it, so builds for stores that forbid it can leave it out. If the app is not yet allowed to install apps, `InstallUpdatePage` explains why before opening the "Install unknown apps" settings screen. Custom pages can do the same with `needsInstallPermission()` and `requestInstallPermission()` of `InstallUpdateViewModel`, otherwise the settings screen opens without explanation when installing. Updates are installed with the `PackageInstaller` session API. On MIUI and HyperOS with MIUI optimization enabled, which breaks that API, the APK is opened in the system installer instead.
 
 ## macOS
 

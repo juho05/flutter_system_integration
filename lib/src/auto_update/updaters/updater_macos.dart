@@ -16,7 +16,7 @@ class MacOSUpdateFailedException implements Exception {
   String toString() => "MacOSUpdateFailedException: $message";
 }
 
-class UpdaterMacOS implements Updater {
+class UpdaterMacOS extends Updater {
   static final _teamIdRegex = RegExp(r"^TeamIdentifier=(.*)$", multiLine: true);
 
   /// Replaces the app bundle once the app has exited. Runs as the current

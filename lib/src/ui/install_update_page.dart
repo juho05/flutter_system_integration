@@ -2,10 +2,17 @@ import 'dart:io';
 
 import 'package:flutter_system_integration/src/auto_update/auto_update_repository.dart';
 import 'package:flutter_system_integration/src/auto_update/install_update_viewmodel.dart';
+import 'package:flutter_system_integration/src/log.dart';
 import 'package:flutter_system_integration/src/restart.dart';
+import 'package:flutter_system_integration/src/ui/common.dart';
 import 'package:material_ui/material_ui.dart';
 
+final _log = createLogger("InstallUpdatePage");
+
 /// Downloads and installs the latest version and shows the progress.
+///
+/// If the platform requires a permission to install the update, an
+/// explanation dialog is shown before the system asks for it.
 class InstallUpdatePage extends StatefulWidget {
   /// Must not be null if [AutoUpdateRepository.autoUpdatesSupported] is true.
   final AutoUpdateRepository? autoUpdateRepository;
@@ -14,10 +21,14 @@ class InstallUpdatePage extends StatefulWidget {
   /// platforms that do not support restarting. Defaults to `exit(0)`.
   final VoidCallback? onExit;
 
+  /// Defaults to [showSnackBarMessage].
+  final ShowMessageCallback showMessage;
+
   const InstallUpdatePage({
     super.key,
     required this.autoUpdateRepository,
     this.onExit,
+    this.showMessage = showSnackBarMessage,
   });
 
   @override
@@ -42,6 +53,52 @@ class _InstallUpdatePageState extends State<InstallUpdatePage> {
     _viewModel?.dispose();
     super.dispose();
   }
+
+  Future<void> _install(InstallUpdateViewModel viewModel) async {
+    try {
+      if (await viewModel.needsInstallPermission()) {
+        if (!mounted) return;
+        if (await _showInstallPermissionDialog() != true) return;
+        if (!await viewModel.requestInstallPermission()) {
+          if (!mounted) return;
+          widget.showMessage(
+            context,
+            "Permission not granted, the update can't be installed.",
+          );
+          return;
+        }
+      }
+    } on Exception catch (e, st) {
+      _log.severe("Failed to request install permission", e, st);
+      if (!mounted) return;
+      widget.showMessage(context, "Failed to request install permission!");
+      return;
+    }
+    await viewModel.installUpdate();
+  }
+
+  Future<bool?> _showInstallPermissionDialog() => showAdaptiveDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog.adaptive(
+      title: const Text("Allow Installing Updates"),
+      content: const Text(
+        "To install updates, Android needs your permission for this app to "
+        "install apps.\n\n"
+        "On the next screen, turn on \"Allow from this source\", "
+        "then go back.",
+      ),
+      actions: [
+        AdaptiveDialogAction(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text("Cancel"),
+        ),
+        AdaptiveDialogAction(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text("Open Settings"),
+        ),
+      ],
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -110,7 +167,7 @@ class _InstallUpdatePageState extends State<InstallUpdatePage> {
           if (status == AutoUpdateStatus.initial ||
               status == AutoUpdateStatus.failure)
             FilledButton(
-              onPressed: viewModel.installUpdate,
+              onPressed: () => _install(viewModel),
               child: Text(
                 status == AutoUpdateStatus.failure ? "Retry" : "Install",
               ),

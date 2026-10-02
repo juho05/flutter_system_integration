@@ -74,6 +74,15 @@ class AutoUpdateRepository extends ChangeNotifier {
     }
   }
 
+  /// Whether the user has to grant a permission before an update can be
+  /// installed. Currently only the case on Android.
+  Future<bool> needsInstallPermission() => _updater.needsInstallPermission();
+
+  /// Asks the user to grant the install permission, on Android by opening the
+  /// system settings. Returns whether it was granted.
+  Future<bool> requestInstallPermission() =>
+      _updater.requestInstallPermission();
+
   /// Downloads and installs the latest version.
   ///
   /// Errors are logged and reflected in [status] instead of being thrown.
