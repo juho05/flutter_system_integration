@@ -116,6 +116,9 @@ class _VersionCheckingSettingsPageState
         child: ListenableBuilder(
           listenable: _viewModel,
           builder: (context, _) {
+            final checkNowLabel = Text(
+              _viewModel.checking ? "Checking..." : "Check now",
+            );
             return ListView(
               padding: const EdgeInsets.all(8),
               children: [
@@ -127,13 +130,17 @@ class _VersionCheckingSettingsPageState
                 const SizedBox(height: 16),
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: FilledButton.tonalIcon(
-                    onPressed: _viewModel.checking ? null : _checkNow,
-                    icon: const Icon(Icons.update),
-                    label: Text(
-                      _viewModel.checking ? "Checking..." : "Check now",
-                    ),
-                  ),
+                  child: Theme.of(context).brightness == Brightness.dark
+                      ? FilledButton.tonalIcon(
+                          onPressed: _viewModel.checking ? null : _checkNow,
+                          icon: const Icon(Icons.update),
+                          label: checkNowLabel,
+                        )
+                      : FilledButton.icon(
+                          onPressed: _viewModel.checking ? null : _checkNow,
+                          icon: const Icon(Icons.update),
+                          label: checkNowLabel,
+                        ),
                 ),
                 const SizedBox(height: 32),
                 InfoText(
