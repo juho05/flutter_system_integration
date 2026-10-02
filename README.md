@@ -24,6 +24,10 @@ Auto updates download release assets from the GitHub release of the latest tag. 
 
 Auto updates require the app to declare the `REQUEST_INSTALL_PACKAGES` permission in its manifest. The package does not add it, so builds for stores that forbid it can leave it out. Updates are installed with the `PackageInstaller` session API. On MIUI and HyperOS with MIUI optimization enabled, which breaks that API, the APK is opened in the system installer instead.
 
+## macOS
+
+The update replaces the running `<appName>.app` bundle wherever it is installed. If the current user can't replace it, for example a standard user running an app installed by an admin, macOS asks for admin credentials. The app in the DMG must have a valid code signature with the same team identifier as the installed app. Ad-hoc signed apps are only replaced by other ad-hoc signed apps. Updates are refused while the app runs translocated, for example straight from the Downloads folder. The update log is written to `~/Library/Logs/<appName>/update.log`.
+
 ## Usage
 
 Define a config:
