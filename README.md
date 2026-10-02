@@ -20,6 +20,10 @@ Auto updates download release assets from the GitHub release of the latest tag. 
 | macOS    | `<appName>-<version>-macOS-universal.dmg` containing `<appName>.app` |
 | Linux    | `<appName>-<version>-linux-x86-64.AppImage`                          |
 
+## Android
+
+Auto updates require the app to declare the `REQUEST_INSTALL_PACKAGES` permission in its manifest. The package does not add it, so builds for stores that forbid it can leave it out. Updates are installed with the `PackageInstaller` session API. On MIUI and HyperOS with MIUI optimization enabled, which breaks that API, the APK is opened in the system installer instead.
+
 ## Usage
 
 Define a config:
