@@ -1,0 +1,188 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter_system_integration/src/appimage/appimage_repository.dart';
+import 'package:flutter_system_integration/src/auto_update/updaters/updater.dart';
+import 'package:flutter_system_integration/src/auto_update/updaters/updater_android.dart';
+import 'package:flutter_system_integration/src/auto_update/updaters/updater_linux_appimage.dart';
+import 'package:flutter_system_integration/src/auto_update/updaters/updater_macos.dart';
+import 'package:flutter_system_integration/src/auto_update/updaters/updater_windows.dart';
+import 'package:flutter_system_integration/src/config.dart';
+import 'package:flutter_system_integration/src/github/github_service.dart';
+import 'package:flutter_system_integration/src/log.dart';
+import 'package:flutter_system_integration/src/version/version.dart';
+import 'package:flutter_system_integration/src/version/version_repository.dart';
+import 'package:http/http.dart' as http;
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
+import 'package:rxdart/rxdart.dart';
+
+final _log = createLogger("AutoUpdateRepository");
+
+enum AutoUpdateStatus {
+  initial,
+  checkingVersion,
+  downloading,
+  installing,
+  success,
+  failure,
+}
+
+class AutoUpdateRepository extends ChangeNotifier {
+  static bool get autoUpdatesSupported =>
+      !kIsWeb &&
+      (Platform.isAndroid ||
+          Platform.isWindows ||
+          Platform.isMacOS ||
+          AppImageRepository.isAppImage) &&
+      const bool.fromEnvironment("VERSION_CHECK", defaultValue: true);
+
+  final SystemIntegrationConfig _config;
+  final VersionRepository _versionRepository;
+  final GitHubService _github;
+  final http.Client _http;
+
+  late final Updater _updater;
+
+  AutoUpdateStatus _status = AutoUpdateStatus.initial;
+  AutoUpdateStatus get status => _status;
+
+  final BehaviorSubject<double> _downloadProgress = BehaviorSubject.seeded(0);
+  ValueStream<double> get downloadProgress => _downloadProgress.stream;
+
+  AutoUpdateRepository({
+    required this._config,
+    required this._versionRepository,
+    required this._github,
+    http.Client? httpClient,
+  }) : _http = httpClient ?? http.Client() {
+    final appName = _config.appName;
+    if (Platform.isAndroid) {
+      _log.fine("update platform: Android");
+      _updater = UpdaterAndroid(appName: appName);
+    } else if (Platform.isWindows) {
+      _log.fine("update platform: Windows");
+      _updater = UpdaterWindows(appName: appName);
+    } else if (Platform.isMacOS) {
+      _log.fine("update platform: macOS");
+      _updater = UpdaterMacOS(appName: appName);
+    } else if (AppImageRepository.isAppImage) {
+      _log.fine("update platform: Linux (AppImage)");
+      _updater = UpdaterLinuxAppImage(appName: appName);
+    } else {
+      throw UnsupportedError("auto updates are not supported on this platform");
+    }
+  }
+
+  /// Downloads and installs the latest version.
+  ///
+  /// Errors are logged and reflected in [status] instead of being thrown.
+  /// On Windows and macOS the app exits to let the installer run.
+  Future<void> update() async {
+    if (status != AutoUpdateStatus.initial &&
+        status != AutoUpdateStatus.failure) {
+      _log.warning("Cannot start auto update when it's already running.");
+      return;
+    }
+
+    _log.info("Performing auto update...");
+    _setStatus(AutoUpdateStatus.checkingVersion);
+
+    try {
+      final latestVersionTag = await _versionRepository.getLatestVersionTag(
+        force: true,
+      );
+      if (latestVersionTag == null ||
+          await VersionRepository.getCurrentVersion() >=
+              Version.parse(latestVersionTag)) {
+        _setStatus(AutoUpdateStatus.initial);
+        return;
+      }
+
+      final file = await _download(latestVersionTag);
+
+      _log.fine("Installing ${file.path}...");
+      _setStatus(AutoUpdateStatus.installing);
+      try {
+        await _updater.install(file);
+      } finally {
+        if (await file.exists()) {
+          _log.fine("Removing installer file ${file.path}...");
+          await file.delete();
+        }
+      }
+
+      _log.info("Auto update successful!");
+      _setStatus(AutoUpdateStatus.success);
+    } on Exception catch (e, st) {
+      _log.severe("Auto update failed", e, st);
+      _setStatus(AutoUpdateStatus.failure);
+    }
+  }
+
+  void _setStatus(AutoUpdateStatus status) {
+    _status = status;
+    notifyListeners();
+  }
+
+  Future<File> _download(String tag) async {
+    final fileName = await _updater.generateDownloadFileName(
+      Version.parse(tag),
+    );
+    final uri = _github.generateReleaseDownloadLink(
+      owner: _config.githubOwner,
+      repo: _config.githubRepo,
+      tag: tag,
+      fileName: fileName,
+    );
+
+    _log.fine("Downloading $uri...");
+    _downloadProgress.add(0);
+    _setStatus(AutoUpdateStatus.downloading);
+
+    final targetDir = Directory(
+      path.join(
+        (await getTemporaryDirectory()).absolute.path,
+        "auto_update_downloads",
+      ),
+    );
+    if (await targetDir.exists()) {
+      await targetDir.delete(recursive: true);
+    }
+    await targetDir.create(recursive: true);
+
+    final request = http.Request("GET", uri)
+      ..headers["User-Agent"] = await _github.userAgent;
+    final response = await _http.send(request);
+    if (response.statusCode != 200) {
+      await response.stream.drain<void>();
+      throw GitHubUnexpectedStatusCode(response.statusCode);
+    }
+
+    final totalBytes = response.contentLength;
+    final outputFile = File(path.join(targetDir.path, fileName)).absolute;
+    final sink = outputFile.openWrite();
+    try {
+      int downloadedBytes = 0;
+      await for (final chunk in response.stream) {
+        sink.add(chunk);
+        downloadedBytes += chunk.length;
+        if (totalBytes != null && totalBytes > 0) {
+          _downloadProgress.add(downloadedBytes / totalBytes);
+        }
+      }
+      await sink.close();
+    } catch (_) {
+      await sink.close();
+      if (await outputFile.exists()) await outputFile.delete();
+      rethrow;
+    }
+    return outputFile;
+  }
+
+  @override
+  void dispose() {
+    _downloadProgress.close();
+    super.dispose();
+  }
+}
