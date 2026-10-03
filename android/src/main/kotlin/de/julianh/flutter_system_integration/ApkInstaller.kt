@@ -179,6 +179,8 @@ internal class ApkInstaller(private val context: Context) : PluginRegistry.Activ
                             session.fsync(output)
                         }
                     }
+                    // The app gets killed on success, so the caller can't clean up afterwards.
+                    file.delete()
 
                     var flags = PendingIntent.FLAG_UPDATE_CURRENT
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -253,6 +255,10 @@ internal class ApkInstaller(private val context: Context) : PluginRegistry.Activ
             }
 
             PackageInstaller.STATUS_SUCCESS -> finishInstall { it.success("session") }
+
+            PackageInstaller.STATUS_FAILURE_ABORTED -> finishInstall {
+                it.error("INSTALL_ABORTED", "Installation was aborted", status)
+            }
 
             else -> {
                 val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)

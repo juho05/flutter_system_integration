@@ -124,6 +124,9 @@ class AutoUpdateRepository extends ChangeNotifier {
 
       _log.info("Auto update successful!");
       _setStatus(AutoUpdateStatus.success);
+    } on UpdateCancelledException {
+      _log.info("Auto update cancelled by user");
+      _setStatus(AutoUpdateStatus.initial);
     } on Exception catch (e, st) {
       _log.severe("Auto update failed", e, st);
       _setStatus(AutoUpdateStatus.failure);

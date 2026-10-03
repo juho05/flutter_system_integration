@@ -15,6 +15,14 @@ abstract class Updater {
   Future<bool> requestInstallPermission() async => true;
 }
 
+/// Thrown by [Updater.install] if the user cancelled the installation.
+class UpdateCancelledException implements Exception {
+  const UpdateCancelledException();
+
+  @override
+  String toString() => "update was cancelled by the user";
+}
+
 class NonZeroExitException implements Exception {
   final int exitCode;
   final dynamic errOut;

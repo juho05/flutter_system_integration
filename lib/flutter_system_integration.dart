@@ -7,7 +7,8 @@ export 'src/appimage/appimage_settings_viewmodel.dart';
 export 'src/appimage/integrate_appimage_viewmodel.dart';
 export 'src/auto_update/auto_update_repository.dart';
 export 'src/auto_update/install_update_viewmodel.dart';
-export 'src/auto_update/updaters/updater.dart' show NonZeroExitException;
+export 'src/auto_update/updaters/updater.dart'
+    show NonZeroExitException, UpdateCancelledException;
 export 'src/auto_update/updaters/updater_android.dart'
     show AndroidUpdateFailedException;
 export 'src/auto_update/updaters/updater_macos.dart'

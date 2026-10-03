@@ -69,6 +69,7 @@ class UpdaterAndroid extends Updater {
       });
       _log.fine("Installed APK via $method");
     } on PlatformException catch (e) {
+      if (e.code == "INSTALL_ABORTED") throw const UpdateCancelledException();
       throw AndroidUpdateFailedException(
         "${e.code}: ${e.message}",
         status: e.details is int ? e.details as int : null,
