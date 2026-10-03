@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_system_integration/src/appimage/replace_file.dart';
 import 'package:flutter_system_integration/src/config.dart';
 import 'package:flutter_system_integration/src/key_value_store.dart';
 import 'package:flutter_system_integration/src/log.dart';
@@ -82,7 +83,22 @@ class AppImageRepository {
     final appImagePath = _integratedAppImagePath;
     await Directory(_binDirPath).create(recursive: true);
     _log.finest("Moving AppImage...");
-    _overrideAppImageFile = (await appImageFile.rename(appImagePath)).absolute;
+    final source = appImageFile;
+    try {
+      _overrideAppImageFile = (await source.rename(appImagePath)).absolute;
+    } on FileSystemException catch (e) {
+      // rename fails if source and target are on different file systems
+      _log.fine("Failed to rename AppImage, copying instead", e);
+      _overrideAppImageFile = await replaceWithExecutableCopy(
+        source,
+        appImagePath,
+      );
+      try {
+        await source.delete();
+      } on FileSystemException catch (e, st) {
+        _log.warning("Failed to delete the original AppImage", e, st);
+      }
+    }
 
     try {
       _log.finest("Ensuring AppImage is executable...");

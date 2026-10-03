@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_system_integration/src/appimage/appimage_repository.dart';
@@ -40,7 +41,7 @@ class AutoUpdateRepository extends ChangeNotifier {
   final SystemIntegrationConfig _config;
   final VersionRepository _versionRepository;
   final GitHubService _github;
-  final http.Client _http;
+  final http.Client? _http;
 
   late final Updater _updater;
 
@@ -55,7 +56,7 @@ class AutoUpdateRepository extends ChangeNotifier {
     required this._versionRepository,
     required this._github,
     http.Client? httpClient,
-  }) : _http = httpClient ?? http.Client() {
+  }) : _http = httpClient {
     final appName = _config.appName;
     if (Platform.isAndroid) {
       _log.fine("update platform: Android");
@@ -151,7 +152,7 @@ class AutoUpdateRepository extends ChangeNotifier {
 
     final targetDir = Directory(
       path.join(
-        (await getTemporaryDirectory()).absolute.path,
+        (await _downloadParentDirectory()).absolute.path,
         "auto_update_downloads",
       ),
     );
@@ -160,38 +161,96 @@ class AutoUpdateRepository extends ChangeNotifier {
     }
     await targetDir.create(recursive: true);
 
-    final request = http.Request("GET", uri)
-      ..headers["User-Agent"] = await _github.userAgent;
-    final response = await _http.send(request);
-    if (response.statusCode != 200) {
-      await response.stream.drain<void>();
-      throw GitHubUnexpectedStatusCode(response.statusCode);
+    final outputFile = File(path.join(targetDir.path, fileName)).absolute;
+    final userAgent = await _github.userAgent;
+
+    if (_http != null) {
+      await _downloadFile(
+        _http,
+        uri,
+        userAgent,
+        outputFile.path,
+        _downloadProgress.add,
+      );
+      return outputFile;
     }
 
-    final totalBytes = response.contentLength;
-    final outputFile = File(path.join(targetDir.path, fileName)).absolute;
-    final sink = outputFile.openWrite();
+    // The event loop of the main isolate is tied to the platform thread which
+    // limits the throughput of the response stream.
+    final progress = ReceivePort();
+    progress.listen((p) => _downloadProgress.add(p as double));
     try {
-      int downloadedBytes = 0;
-      await for (final chunk in response.stream) {
-        sink.add(chunk);
-        downloadedBytes += chunk.length;
-        if (totalBytes != null && totalBytes > 0) {
-          _downloadProgress.add(downloadedBytes / totalBytes);
-        }
-      }
-      await sink.close();
-    } catch (_) {
-      await sink.close();
-      if (await outputFile.exists()) await outputFile.delete();
-      rethrow;
+      await Isolate.run(
+        _downloadTask(uri, userAgent, outputFile.path, progress.sendPort),
+      );
+    } finally {
+      progress.close();
     }
     return outputFile;
   }
+
+  /// /tmp is shared between all users on Linux, a directory left behind there
+  /// by one user could not be replaced by another.
+  Future<Directory> _downloadParentDirectory() => Platform.isLinux
+      ? getApplicationCacheDirectory()
+      : getTemporaryDirectory();
 
   @override
   void dispose() {
     _downloadProgress.close();
     super.dispose();
+  }
+}
+
+Future<void> Function() _downloadTask(
+  Uri uri,
+  String userAgent,
+  String outputPath,
+  SendPort progress,
+) => () async {
+  final client = http.Client();
+  try {
+    await _downloadFile(client, uri, userAgent, outputPath, progress.send);
+  } finally {
+    client.close();
+  }
+};
+
+Future<void> _downloadFile(
+  http.Client client,
+  Uri uri,
+  String userAgent,
+  String outputPath,
+  void Function(double progress) onProgress,
+) async {
+  final request = http.Request("GET", uri)..headers["User-Agent"] = userAgent;
+  final response = await client.send(request);
+  if (response.statusCode != 200) {
+    await response.stream.drain<void>();
+    throw GitHubUnexpectedStatusCode(response.statusCode);
+  }
+
+  final totalBytes = response.contentLength;
+  final outputFile = File(outputPath);
+  final sink = outputFile.openWrite();
+  try {
+    int downloadedBytes = 0;
+    int lastPercent = 0;
+    await for (final chunk in response.stream) {
+      sink.add(chunk);
+      downloadedBytes += chunk.length;
+      if (totalBytes != null && totalBytes > 0) {
+        final percent = downloadedBytes * 100 ~/ totalBytes;
+        if (percent != lastPercent) {
+          lastPercent = percent;
+          onProgress(downloadedBytes / totalBytes);
+        }
+      }
+    }
+    await sink.close();
+  } catch (_) {
+    await sink.close();
+    if (await outputFile.exists()) await outputFile.delete();
+    rethrow;
   }
 }

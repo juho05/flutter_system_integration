@@ -1,16 +1,15 @@
 import 'dart:io';
 
 import 'package:flutter_system_integration/src/appimage/appimage_repository.dart';
+import 'package:flutter_system_integration/src/appimage/replace_file.dart';
 import 'package:flutter_system_integration/src/auto_update/updaters/updater.dart';
-import 'package:flutter_system_integration/src/log.dart';
 import 'package:flutter_system_integration/src/version/version.dart';
-
-final _log = createLogger("UpdaterLinuxAppImage");
 
 class UpdaterLinuxAppImage extends Updater {
   final String _appName;
+  final File? _appImageFile;
 
-  UpdaterLinuxAppImage({required this._appName});
+  UpdaterLinuxAppImage({required this._appName, this._appImageFile});
 
   @override
   Future<String> generateDownloadFileName(Version version) async =>
@@ -18,15 +17,7 @@ class UpdaterLinuxAppImage extends Updater {
 
   @override
   Future<void> install(File downloadedFile) async {
-    final appImageFile = AppImageRepository.appImageFile;
-    // delete existing file first to prevent "Text file busy" error
-    await appImageFile.delete();
-    await downloadedFile.copy(appImageFile.path);
-
-    try {
-      await Process.run("chmod", ["+x", appImageFile.path], runInShell: true);
-    } on Exception catch (e, st) {
-      _log.severe("Failed to make updated AppImage executable", e, st);
-    }
+    final appImageFile = _appImageFile ?? AppImageRepository.appImageFile;
+    await replaceWithExecutableCopy(downloadedFile, appImageFile.path);
   }
 }

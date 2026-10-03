@@ -173,7 +173,7 @@ class _InstallUpdatePageState extends State<InstallUpdatePage> {
               ),
             ),
           if (running)
-            const FilledButton(onPressed: null, child: Text("Installing...")),
+            const FilledButton(onPressed: null, child: Text("Please wait...")),
           if (status == AutoUpdateStatus.success)
             FilledButton(
               onPressed: () {
