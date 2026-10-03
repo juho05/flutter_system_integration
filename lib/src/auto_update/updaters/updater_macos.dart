@@ -91,8 +91,9 @@ open "$target"
 ''';
 
   final String _appName;
+  final Future<void> Function()? _beforeExit;
 
-  UpdaterMacOS({required this._appName});
+  UpdaterMacOS({required this._appName, this._beforeExit});
 
   @override
   Future<String> generateDownloadFileName(Version version) async =>
@@ -162,6 +163,7 @@ open "$target"
         logFile.path,
         _swapScript,
       ], mode: ProcessStartMode.detached);
+      await runBeforeExit(_beforeExit);
       exit(0);
     } catch (_) {
       final ejectResult = await Process.run("diskutil", [

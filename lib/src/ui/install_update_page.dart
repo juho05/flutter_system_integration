@@ -19,7 +19,7 @@ class InstallUpdatePage extends StatefulWidget {
 
   /// Called when the user wants to exit after a successful update on
   /// platforms that do not support restarting. Defaults to `exit(0)`.
-  final VoidCallback? onExit;
+  final VoidCallback? exitApp;
 
   /// Defaults to [showSnackBarMessage].
   final ShowMessageCallback showMessage;
@@ -27,7 +27,7 @@ class InstallUpdatePage extends StatefulWidget {
   const InstallUpdatePage({
     super.key,
     required this.autoUpdateRepository,
-    this.onExit,
+    this.exitApp,
     this.showMessage = showSnackBarMessage,
   });
 
@@ -179,8 +179,8 @@ class _InstallUpdatePageState extends State<InstallUpdatePage> {
               onPressed: () {
                 if (Restart.supported) {
                   Restart.restart();
-                } else if (widget.onExit != null) {
-                  widget.onExit!();
+                } else if (widget.exitApp != null) {
+                  widget.exitApp!();
                 } else {
                   exit(0);
                 }

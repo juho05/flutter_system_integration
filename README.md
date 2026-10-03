@@ -81,6 +81,8 @@ if (AutoUpdateRepository.autoUpdatesSupported) {
     config: systemIntegrationConfig,
     versionRepository: versionRepository,
     github: github,
+    // optional, called before the app exits to run the installer
+    beforeExit: () async => disposeTrayIcon(),
   );
 }
 ```

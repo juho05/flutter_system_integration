@@ -51,11 +51,17 @@ class AutoUpdateRepository extends ChangeNotifier {
   final BehaviorSubject<double> _downloadProgress = BehaviorSubject.seeded(0);
   ValueStream<double> get downloadProgress => _downloadProgress.stream;
 
+  /// [beforeExit] is called on Windows and macOS right before the app exits
+  /// to let the installer run. Use it to release resources that must not be
+  /// alive when the process exits, e.g. a tray icon. It does not have to exit
+  /// the app itself, the app exits once it completes, throws or takes longer
+  /// than a few seconds.
   AutoUpdateRepository({
     required this._config,
     required this._versionRepository,
     required this._github,
     http.Client? httpClient,
+    Future<void> Function()? beforeExit,
   }) : _http = httpClient {
     final appName = _config.appName;
     if (Platform.isAndroid) {
@@ -63,10 +69,10 @@ class AutoUpdateRepository extends ChangeNotifier {
       _updater = UpdaterAndroid(appName: appName);
     } else if (Platform.isWindows) {
       _log.fine("update platform: Windows");
-      _updater = UpdaterWindows(appName: appName);
+      _updater = UpdaterWindows(appName: appName, beforeExit: beforeExit);
     } else if (Platform.isMacOS) {
       _log.fine("update platform: macOS");
-      _updater = UpdaterMacOS(appName: appName);
+      _updater = UpdaterMacOS(appName: appName, beforeExit: beforeExit);
     } else if (AppImageRepository.isAppImage) {
       _log.fine("update platform: Linux (AppImage)");
       _updater = UpdaterLinuxAppImage(appName: appName);
