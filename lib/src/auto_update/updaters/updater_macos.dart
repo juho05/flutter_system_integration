@@ -84,7 +84,7 @@ else
   echo "$(date): updating $target"
   /bin/sh -c "$swap" swap "$pid" "$src" "$target"
 fi
-hdiutil detach "$mnt" || hdiutil detach -force "$mnt"
+diskutil eject "$mnt" || diskutil eject force "$mnt" || hdiutil detach -force "$mnt"
 rmdir "$mnt" "$(dirname "$mnt")"
 rm -f "$dmg"
 open "$target"
@@ -108,15 +108,27 @@ open "$target"
     await mountPoint.create();
 
     _log.fine("Mounting DMG ${downloadedFile.path} at ${mountPoint.path}...");
-    final attachResult = await Process.run("hdiutil", [
+    var attachResult = await Process.run("diskutil", [
+      "image",
       "attach",
-      "-nobrowse",
-      "-readonly",
-      "-noautoopen",
-      "-mountpoint",
+      "--nobrowse",
+      "--readOnly",
+      "--mountPoint",
       mountPoint.path,
       downloadedFile.path,
     ]);
+    if (attachResult.exitCode != 0) {
+      // Older macOS versions do not have diskutil image.
+      attachResult = await Process.run("hdiutil", [
+        "attach",
+        "-nobrowse",
+        "-readonly",
+        "-noautoopen",
+        "-mountpoint",
+        mountPoint.path,
+        downloadedFile.path,
+      ]);
+    }
     if (attachResult.exitCode != 0) {
       await workDir.delete(recursive: true);
       throwOnNonZeroExitCode(attachResult);
@@ -152,7 +164,15 @@ open "$target"
       ], mode: ProcessStartMode.detached);
       exit(0);
     } catch (_) {
-      await Process.run("hdiutil", ["detach", "-force", mountPoint.path]);
+      final ejectResult = await Process.run("diskutil", [
+        "eject",
+        "force",
+        mountPoint.path,
+      ]);
+      if (ejectResult.exitCode != 0) {
+        // Older macOS versions do not support eject force.
+        await Process.run("hdiutil", ["detach", "-force", mountPoint.path]);
+      }
       await workDir.delete(recursive: true);
       rethrow;
     }
