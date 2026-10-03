@@ -133,7 +133,8 @@ class AutoUpdateRepository extends ChangeNotifier {
     } on UpdateCancelledException {
       _log.info("Auto update cancelled by user");
       _setStatus(AutoUpdateStatus.initial);
-    } on Exception catch (e, st) {
+    } on Object catch (e, st) {
+      // errors from the download isolate can arrive as a RemoteError
       _log.severe("Auto update failed", e, st);
       _setStatus(AutoUpdateStatus.failure);
     }
