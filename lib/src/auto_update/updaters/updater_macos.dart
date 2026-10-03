@@ -74,6 +74,8 @@ end run
   static const _helperScript = r'''
 swappid="$1"; pid="$2"; src="$3"; target="$4"; dmg="$5"; mnt="$6"
 log="$7"; swap="$8"
+# A failing redirection on exec would terminate the shell.
+( : >>"$log" ) 2>/dev/null || log=/dev/null
 exec </dev/null >>"$log" 2>&1
 if [ -n "$swappid" ]; then
   echo "$(date): waiting for privileged update of $target"
@@ -115,7 +117,10 @@ open "$target"
       mountPoint.path,
       downloadedFile.path,
     ]);
-    throwOnNonZeroExitCode(attachResult);
+    if (attachResult.exitCode != 0) {
+      await workDir.delete(recursive: true);
+      throwOnNonZeroExitCode(attachResult);
+    }
 
     try {
       final sourceApp = path.join(mountPoint.path, "$_appName.app");
@@ -123,6 +128,7 @@ open "$target"
         throw MacOSUpdateFailedException("DMG does not contain $_appName.app");
       }
       await _verifySignature(sourceApp, targetApp);
+      await _verifyMinimumSystemVersion(sourceApp);
 
       final logFile = await _createLogFile();
       var swapPid = "";
@@ -212,6 +218,27 @@ open "$target"
     }
   }
 
+  /// Installing a version that requires a newer macOS would leave the user
+  /// with an app that can't be launched.
+  Future<void> _verifyMinimumSystemVersion(String newApp) async {
+    final minResult = await Process.run("/usr/bin/plutil", [
+      "-extract",
+      "LSMinimumSystemVersion",
+      "raw",
+      path.join(newApp, "Contents", "Info.plist"),
+    ]);
+    if (minResult.exitCode != 0) return;
+    final osResult = await Process.run("/usr/bin/sw_vers", ["-productVersion"]);
+    throwOnNonZeroExitCode(osResult);
+    final required = Version.parse((minResult.stdout as String).trim());
+    final os = Version.parse((osResult.stdout as String).trim());
+    if (required > os) {
+      throw MacOSUpdateFailedException(
+        "new version requires macOS $required, running $os",
+      );
+    }
+  }
+
   Future<String?> _teamIdentifier(String app) async {
     final result = await Process.run("codesign", ["-dv", "--verbose=2", app]);
     throwOnNonZeroExitCode(result);
@@ -235,6 +262,15 @@ open "$target"
       path.join(Platform.environment["HOME"]!, "Library", "Logs", _appName),
     );
     await logDir.create(recursive: true);
-    return File(path.join(logDir.path, "update.log"));
+    final logFile = File(path.join(logDir.path, "update.log"));
+    // Must exist before the privileged swap appends to it, otherwise it is
+    // created by root and the unprivileged helper can't write to it.
+    try {
+      await logFile.writeAsString("", mode: FileMode.append);
+    } on FileSystemException {
+      await logFile.delete();
+      await logFile.create();
+    }
+    return logFile;
   }
 }
