@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 
@@ -10,6 +11,7 @@ import 'package:flutter_system_integration/src/auto_update/updaters/updater_maco
 import 'package:flutter_system_integration/src/auto_update/updaters/updater_windows.dart';
 import 'package:flutter_system_integration/src/config.dart';
 import 'package:flutter_system_integration/src/github/github_service.dart';
+import 'package:flutter_system_integration/src/github/http_client.dart';
 import 'package:flutter_system_integration/src/log.dart';
 import 'package:flutter_system_integration/src/version/version.dart';
 import 'package:flutter_system_integration/src/version/version_repository.dart';
@@ -19,6 +21,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:rxdart/rxdart.dart';
 
 final _log = createLogger("AutoUpdateRepository");
+
+const _downloadStallTimeout = Duration(seconds: 30);
 
 enum AutoUpdateStatus {
   initial,
@@ -218,7 +222,7 @@ Future<void> Function() _downloadTask(
   String outputPath,
   SendPort progress,
 ) => () async {
-  final client = http.Client();
+  final client = createHttpClient();
   try {
     await _downloadFile(client, uri, userAgent, outputPath, progress.send);
   } finally {
@@ -233,34 +237,53 @@ Future<void> _downloadFile(
   String outputPath,
   void Function(double progress) onProgress,
 ) async {
-  final request = http.Request("GET", uri)..headers["User-Agent"] = userAgent;
-  final response = await client.send(request);
-  if (response.statusCode != 200) {
-    await response.stream.drain<void>();
-    throw GitHubUnexpectedStatusCode(response.statusCode);
+  // The timer is restarted on every received chunk, so it only fires when no
+  // data arrives at all and never limits the total download duration.
+  final abort = Completer<void>();
+  Timer? stallTimer;
+  void restartStallTimer() {
+    stallTimer?.cancel();
+    stallTimer = Timer(_downloadStallTimeout, abort.complete);
   }
 
-  final totalBytes = response.contentLength;
-  final outputFile = File(outputPath);
-  final sink = outputFile.openWrite();
+  final request = http.AbortableRequest("GET", uri, abortTrigger: abort.future)
+    ..headers["User-Agent"] = userAgent;
+  restartStallTimer();
   try {
-    int downloadedBytes = 0;
-    int lastPercent = 0;
-    await for (final chunk in response.stream) {
-      sink.add(chunk);
-      downloadedBytes += chunk.length;
-      if (totalBytes != null && totalBytes > 0) {
-        final percent = downloadedBytes * 100 ~/ totalBytes;
-        if (percent != lastPercent) {
-          lastPercent = percent;
-          onProgress(downloadedBytes / totalBytes);
+    final response = await client.send(request);
+    if (response.statusCode != 200) {
+      await response.stream.drain<void>();
+      throw GitHubUnexpectedStatusCode(response.statusCode);
+    }
+
+    final totalBytes = response.contentLength;
+    final outputFile = File(outputPath);
+    final sink = outputFile.openWrite();
+    try {
+      int downloadedBytes = 0;
+      int lastPercent = 0;
+      await for (final chunk in response.stream) {
+        restartStallTimer();
+        sink.add(chunk);
+        downloadedBytes += chunk.length;
+        if (totalBytes != null && totalBytes > 0) {
+          final percent = downloadedBytes * 100 ~/ totalBytes;
+          if (percent != lastPercent) {
+            lastPercent = percent;
+            onProgress(downloadedBytes / totalBytes);
+          }
         }
       }
+      stallTimer?.cancel();
+      await sink.close();
+    } catch (_) {
+      await sink.close();
+      if (await outputFile.exists()) await outputFile.delete();
+      rethrow;
     }
-    await sink.close();
-  } catch (_) {
-    await sink.close();
-    if (await outputFile.exists()) await outputFile.delete();
-    rethrow;
+  } on http.RequestAbortedException {
+    throw TimeoutException("Download stalled: $uri", _downloadStallTimeout);
+  } finally {
+    stallTimer?.cancel();
   }
 }

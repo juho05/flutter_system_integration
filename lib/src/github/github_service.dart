@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter_system_integration/src/config.dart';
+import 'package:flutter_system_integration/src/github/http_client.dart';
 import 'package:flutter_system_integration/src/log.dart';
 import 'package:flutter_system_integration/src/version/version_repository.dart';
 import 'package:http/http.dart' as http;
@@ -24,6 +26,7 @@ class GitHubUnexpectedStatusCode implements Exception {
 
 class GitHubService {
   static const _maxRetries = 5;
+  static const _requestTimeout = Duration(seconds: 30);
 
   final http.Client _http;
 
@@ -37,7 +40,7 @@ class GitHubService {
     http.Client? httpClient,
     String apiBaseUri = "https://api.github.com",
     String webBaseUri = "https://github.com",
-  }) : _http = httpClient ?? http.Client(),
+  }) : _http = httpClient ?? createHttpClient(),
        _apiBaseUri = Uri.parse(apiBaseUri),
        _webBaseUri = Uri.parse(webBaseUri);
 
@@ -89,16 +92,27 @@ class GitHubService {
     final userAgent = await this.userAgent;
     for (int attempt = 1; attempt <= _maxRetries; attempt++) {
       _log.finest("GitHub request: $method $url");
-      final request = http.Request(method, url)
-        ..headers.addAll({
-          "Accept": "application/vnd.github+json",
-          // https://docs.github.com/en/rest/about-the-rest-api/api-versions?apiVersion=2022-11-28#supported-api-versions
-          "X-GitHub-Api-Version": "2022-11-28",
-          "User-Agent": userAgent,
-        });
-      final response = await http.Response.fromStream(
-        await _http.send(request),
-      );
+      final abort = Completer<void>();
+      final request =
+          http.AbortableRequest(method, url, abortTrigger: abort.future)
+            ..headers.addAll({
+              "Accept": "application/vnd.github+json",
+              // https://docs.github.com/en/rest/about-the-rest-api/api-versions?apiVersion=2022-11-28#supported-api-versions
+              "X-GitHub-Api-Version": "2022-11-28",
+              "User-Agent": userAgent,
+            });
+      final timer = Timer(_requestTimeout, abort.complete);
+      final http.Response response;
+      try {
+        response = await http.Response.fromStream(await _http.send(request));
+      } on http.RequestAbortedException {
+        throw TimeoutException(
+          "GitHub request timed out: $url",
+          _requestTimeout,
+        );
+      } finally {
+        timer.cancel();
+      }
       if (response.statusCode == 429 ||
           (response.statusCode == 403 &&
               response.headers["x-ratelimit-remaining"] == "0")) {
