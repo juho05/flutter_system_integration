@@ -8,6 +8,12 @@ final _log = createLogger("Updater");
 abstract class Updater {
   Future<String> generateDownloadFileName(Version version);
 
+  /// Release asset names in order of preference. If the release has no file
+  /// with a name, the next one is downloaded instead. Must not be empty.
+  Future<List<String>> generateDownloadFileNames(Version version) async => [
+    await generateDownloadFileName(version),
+  ];
+
   Future<void> install(File downloadedFile);
 
   /// Whether the user has to grant a permission before [install] can succeed.

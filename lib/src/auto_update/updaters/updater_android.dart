@@ -22,7 +22,6 @@ class AndroidUpdateFailedException implements Exception {
 }
 
 class UpdaterAndroid extends Updater {
-  static const _defaultArch = "arm64v8";
   static const _channel = MethodChannel(
     "flutter_system_integration/apk_installer",
   );
@@ -33,19 +32,26 @@ class UpdaterAndroid extends Updater {
   UpdaterAndroid({required this._appName});
 
   @override
-  Future<String> generateDownloadFileName(Version version) async {
-    String arch;
+  Future<String> generateDownloadFileName(Version version) async =>
+      (await generateDownloadFileNames(version)).first;
+
+  @override
+  Future<List<String>> generateDownloadFileNames(Version version) async {
+    String? arch;
     try {
       arch = await _getArchitecture();
     } on Exception catch (e, st) {
-      _log.severe(
-        "Failed to get system architecture. Defaulting to $_defaultArch",
+      _log.warning(
+        "Failed to get system architecture. Using universal APK",
         e,
         st,
       );
-      arch = _defaultArch;
     }
-    return "$_appName-$version-android-$arch.apk";
+    final universal = "$_appName-$version-android.apk";
+    if (arch == null) {
+      return [universal, "$_appName-$version-android-arm64v8.apk"];
+    }
+    return ["$_appName-$version-android-$arch.apk", universal];
   }
 
   @override
@@ -77,7 +83,7 @@ class UpdaterAndroid extends Updater {
     }
   }
 
-  Future<String> _getArchitecture() async {
+  Future<String?> _getArchitecture() async {
     final androidInfo = await _deviceInfo.androidInfo;
     final abis = androidInfo.supportedAbis;
     // supportedAbis is ordered by device preference
@@ -91,9 +97,7 @@ class UpdaterAndroid extends Updater {
           return "x64";
       }
     }
-    _log.warning(
-      "Couldn't find known ABI in list: $abis. Defaulting to $_defaultArch",
-    );
-    return _defaultArch;
+    _log.warning("Couldn't find known ABI in list: $abis. Using universal APK");
+    return null;
   }
 }

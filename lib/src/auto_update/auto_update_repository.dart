@@ -150,17 +150,11 @@ class AutoUpdateRepository extends ChangeNotifier {
   }
 
   Future<File> _download(String tag) async {
-    final fileName = await _updater.generateDownloadFileName(
+    final fileNames = await _updater.generateDownloadFileNames(
       Version.parse(tag),
     );
-    final uri = _github.generateReleaseDownloadLink(
-      owner: _config.githubOwner,
-      repo: _config.githubRepo,
-      tag: tag,
-      fileName: fileName,
-    );
+    assert(fileNames.isNotEmpty);
 
-    _log.fine("Downloading $uri...");
     _downloadProgress.add(0);
     _setStatus(AutoUpdateStatus.downloading);
 
@@ -174,6 +168,30 @@ class AutoUpdateRepository extends ChangeNotifier {
       await targetDir.delete(recursive: true);
     }
     await targetDir.create(recursive: true);
+
+    for (final fileName in fileNames.take(fileNames.length - 1)) {
+      try {
+        return await _downloadReleaseFile(tag, fileName, targetDir);
+      } on GitHubUnexpectedStatusCode catch (e) {
+        if (e.status != 404) rethrow;
+        _log.warning("$fileName not found in release, trying next file");
+      }
+    }
+    return await _downloadReleaseFile(tag, fileNames.last, targetDir);
+  }
+
+  Future<File> _downloadReleaseFile(
+    String tag,
+    String fileName,
+    Directory targetDir,
+  ) async {
+    final uri = _github.generateReleaseDownloadLink(
+      owner: _config.githubOwner,
+      repo: _config.githubRepo,
+      tag: tag,
+      fileName: fileName,
+    );
+    _log.fine("Downloading $uri...");
 
     final outputFile = File(path.join(targetDir.path, fileName)).absolute;
     final userAgent = await _github.userAgent;
