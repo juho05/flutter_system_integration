@@ -80,14 +80,16 @@ class UpdaterAndroid extends Updater {
   Future<String> _getArchitecture() async {
     final androidInfo = await _deviceInfo.androidInfo;
     final abis = androidInfo.supportedAbis;
-    if (abis.contains("arm64-v8a")) {
-      return "arm64v8";
-    }
-    if (abis.contains("armeabi-v7a")) {
-      return "arm32v7";
-    }
-    if (abis.contains("x86_64")) {
-      return "x64";
+    // supportedAbis is ordered by device preference
+    for (final abi in abis) {
+      switch (abi) {
+        case "arm64-v8a":
+          return "arm64v8";
+        case "armeabi-v7a":
+          return "arm32v7";
+        case "x86_64":
+          return "x64";
+      }
     }
     _log.warning(
       "Couldn't find known ABI in list: $abis. Defaulting to $_defaultArch",

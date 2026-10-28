@@ -95,6 +95,10 @@ if (AutoUpdateRepository.autoUpdatesSupported) {
 - `<envPrefix>_DISABLE_VERSION_CHECK=1` disables version checking at runtime.
 - `<envPrefix>_DISABLE_APPIMAGE_INTEGRATION=1` disables the AppImage integration prompt.
 
+### Testing against a fake GitHub
+
+`<envPrefix>_GITHUB_API_URL` and `<envPrefix>_GITHUB_WEB_URL` replace `https://api.github.com` and `https://github.com`, so version checks and update downloads can be served by a local server. On Android, set the system properties `debug.<envprefix>.github_api_url` and `debug.<envprefix>.github_web_url` (lowercase prefix) with `adb shell setprop` instead and restart the app.
+
 ### Logging
 
 The package logs with [`package:logging`](https://pub.dev/packages/logging). All logger names start with `systemIntegrationLoggerName`. Forward the records to your logger:

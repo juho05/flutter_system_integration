@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter_system_integration/src/config.dart';
+import 'package:flutter_system_integration/src/github/base_uri.dart';
 import 'package:flutter_system_integration/src/github/http_client.dart';
 import 'package:flutter_system_integration/src/log.dart';
 import 'package:flutter_system_integration/src/version/version_repository.dart';
@@ -38,11 +39,15 @@ class GitHubService {
   GitHubService({
     required this._config,
     http.Client? httpClient,
-    String apiBaseUri = "https://api.github.com",
-    String webBaseUri = "https://github.com",
+    String? apiBaseUri,
+    String? webBaseUri,
   }) : _http = httpClient ?? createHttpClient(),
-       _apiBaseUri = Uri.parse(apiBaseUri),
-       _webBaseUri = Uri.parse(webBaseUri);
+       _apiBaseUri = apiBaseUri != null
+           ? parseBaseUri(apiBaseUri)
+           : _config.githubApiBaseUri,
+       _webBaseUri = webBaseUri != null
+           ? parseBaseUri(webBaseUri)
+           : _config.githubWebBaseUri;
 
   Future<String> get userAgent async =>
       "${_config.appName} v${await VersionRepository.getCurrentVersion()}";
@@ -58,7 +63,7 @@ class GitHubService {
   }) async {
     final json = await _requestJson(
       "GET",
-      "/repos/${Uri.encodeComponent(owner)}/${Uri.encodeComponent(repo)}/tags",
+      "repos/${Uri.encodeComponent(owner)}/${Uri.encodeComponent(repo)}/tags",
       queryParameters: {
         if (pageSize != null) "per_page": pageSize.toString(),
         if (page != null) "page": page.toString(),
