@@ -22,6 +22,8 @@ Auto updates download release assets from the GitHub release of the latest tag. 
 
 On Android, the universal `<appName>-<version>-android.apk` containing all ABIs can be added as well. It is downloaded if the device ABI is unknown or the release has no APK for it. If the ABI is unknown and there is no universal APK, the `arm64v8` APK is downloaded.
 
+On macOS, `<appName>-<version>-macOS.dmg` is downloaded if the release has no `-universal` DMG.
+
 ## Android
 
 Auto updates require the app to declare the `REQUEST_INSTALL_PACKAGES` permission in its manifest. The package does not add it, so builds for stores that forbid it can leave it out. If the app is not yet allowed to install apps, `InstallUpdatePage` explains why before opening the "Install unknown apps" settings screen. Custom pages can do the same with `needsInstallPermission()` and `requestInstallPermission()` of `InstallUpdateViewModel`, otherwise the settings screen opens without explanation when installing. Updates are installed with the `PackageInstaller` session API. On MIUI and HyperOS with MIUI optimization enabled, which breaks that API, the APK is opened in the system installer instead.

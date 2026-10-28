@@ -97,7 +97,13 @@ open "$target"
 
   @override
   Future<String> generateDownloadFileName(Version version) async =>
-      "$_appName-$version-macOS-universal.dmg";
+      (await generateDownloadFileNames(version)).first;
+
+  @override
+  Future<List<String>> generateDownloadFileNames(Version version) async => [
+    "$_appName-$version-macOS-universal.dmg",
+    "$_appName-$version-macOS.dmg",
+  ];
 
   @override
   Future<void> install(File downloadedFile) async {
