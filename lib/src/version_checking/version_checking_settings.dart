@@ -17,6 +17,8 @@ class VersionCheckingSettings extends ChangeNotifier {
 
   bool get enabled => _enabled;
 
+  bool get externallyDisabled => _config.versionCheckExternallyDisabled;
+
   VersionCheckingSettings({required this._config, required this._keyValue});
 
   Future<void> load() async {

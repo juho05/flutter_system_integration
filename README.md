@@ -136,6 +136,7 @@ Custom install pages call `prepareUpdate()` of `InstallUpdateViewModel`, show `P
 - `--dart-define=VERSION_CHECK=false` disables version checking and auto updates at build time.
 - `<envPrefix>_DISABLE_VERSION_CHECK=1` disables version checking and auto updates at runtime.
 - `<envPrefix>_DISABLE_APPIMAGE_INTEGRATION=1` disables the AppImage integration prompt.
+- The `VersionCheckingSettings` switch only disables the check for new versions, successful updates are still detected.
 
 ### Testing against a fake GitHub
 

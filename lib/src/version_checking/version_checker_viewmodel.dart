@@ -7,13 +7,18 @@ import 'package:flutter_system_integration/src/version_checking/version_checking
 
 final _log = createLogger("VersionCheckerViewModel");
 
-/// Checks for a new version on startup at most once per day.
+/// Checks for a new version on startup at most once per day and detects
+/// successful updates.
+///
+/// The settings switch only disables the check for a new version. Disabling
+/// version checking externally disables both.
 class VersionCheckerViewModel extends ChangeNotifier {
   static const String _keyLastDisplayedDialog = "version.last_displayed_dialog";
   static const String _keyIgnoreVersion = "version.ignore_version";
 
   final KeyValueStore _keyValue;
   final VersionRepository _versionRepo;
+  final VersionCheckingSettings _settings;
 
   bool _checked = false;
 
@@ -29,11 +34,11 @@ class VersionCheckerViewModel extends ChangeNotifier {
   VersionCheckerViewModel({
     required this._keyValue,
     required this._versionRepo,
-    required VersionCheckingSettings settings,
+    required this._settings,
   }) {
-    if (!settings.enabled) {
+    if (_settings.externallyDisabled) {
       _checked = true;
-      _log.info("version checking is disabled");
+      _log.info("version checking is disabled externally");
     }
   }
 
@@ -46,6 +51,11 @@ class VersionCheckerViewModel extends ChangeNotifier {
     if (prevCurrent != null && _current! > prevCurrent) {
       showUpdateSuccessful = true;
       notifyListeners();
+    }
+
+    if (!_settings.enabled) {
+      _log.info("version checking is disabled in the settings");
+      return;
     }
 
     final lastDisplayed = await _keyValue.loadDateTime(_keyLastDisplayedDialog);

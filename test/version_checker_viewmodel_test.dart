@@ -40,6 +40,7 @@ void main() {
     versionChecking = MockVersionCheckingSettings();
 
     when(() => versionChecking.enabled).thenReturn(true);
+    when(() => versionChecking.externallyDisabled).thenReturn(false);
 
     when(
       () => keyValue.loadObject<Version>(any(), any()),
@@ -59,16 +60,39 @@ void main() {
   );
 
   group('check disabled', () {
-    test('settings disabled -> check() is a no-op', () async {
+    test('externally disabled -> check() is a no-op', () async {
       when(() => versionChecking.enabled).thenReturn(false);
+      when(() => versionChecking.externallyDisabled).thenReturn(true);
+      when(
+        () => keyValue.loadObject<Version>(any(), any()),
+      ).thenAnswer((_) async => _older);
       final vm = build();
 
       await vm.check();
 
       verifyNever(() => versionRepo.getLatestVersion());
       expect(vm.latest, isNull);
+      expect(vm.showUpdateSuccessful, isFalse);
       vm.dispose();
     });
+
+    test(
+      'settings disabled -> no version check, upgrade still detected',
+      () async {
+        when(() => versionChecking.enabled).thenReturn(false);
+        when(
+          () => keyValue.loadObject<Version>(any(), any()),
+        ).thenAnswer((_) async => _older);
+        final vm = build();
+
+        await vm.check();
+
+        verifyNever(() => versionRepo.getLatestVersion());
+        expect(vm.latest, isNull);
+        expect(vm.showUpdateSuccessful, isTrue);
+        vm.dispose();
+      },
+    );
   });
 
   group('upgrade detection', () {
