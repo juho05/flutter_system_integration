@@ -21,7 +21,12 @@ export 'src/restart.dart';
 export 'src/ui/appimage_settings_page.dart';
 export 'src/ui/common.dart' show ShowMessageCallback, showSnackBarMessage;
 export 'src/ui/install_update_page.dart';
+export 'src/ui/upgrade_messages_dialog.dart'
+    show UpgradeMessagesDialog, showUpgradeMessagesDialog;
 export 'src/ui/version_checking_settings_page.dart';
+export 'src/upgrade_messages/upgrade_message.dart';
+export 'src/upgrade_messages/upgrade_messages_repository.dart';
+export 'src/upgrade_messages/upgrade_messages_viewmodel.dart';
 export 'src/version/version.dart';
 export 'src/version/version_repository.dart';
 export 'src/version_checking/version_checker_viewmodel.dart';

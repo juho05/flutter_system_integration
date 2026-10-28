@@ -1,3 +1,5 @@
 .dart_tool/
 build/
 pubspec.lock
+# Widget Preview related
+.widget_preview/

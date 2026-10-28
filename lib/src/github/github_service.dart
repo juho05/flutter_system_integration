@@ -86,10 +86,43 @@ class GitHubService {
     );
   }
 
+  /// Returns the raw content of the file at [path] in the repository at
+  /// [ref], which may be a tag, branch or commit.
+  Future<String> getRepositoryFileContent({
+    required String owner,
+    required String repo,
+    required String path,
+    required String ref,
+  }) async {
+    final segments = path.split("/").where((s) => s.isNotEmpty);
+    final content = await _request(
+      "GET",
+      "repos/${Uri.encodeComponent(owner)}/${Uri.encodeComponent(repo)}"
+          "/contents/${segments.map(Uri.encodeComponent).join("/")}",
+      queryParameters: {"ref": ref},
+      accept: "application/vnd.github.raw+json",
+    );
+    if (content == null) {
+      throw GitHubUnexpectedStatusCode(304);
+    }
+    return content;
+  }
+
   Future<dynamic> _requestJson(
     String method,
     String path, {
     Map<String, String> queryParameters = const {},
+  }) async {
+    final body = await _request(method, path, queryParameters: queryParameters);
+    return body == null ? null : jsonDecode(body);
+  }
+
+  /// Returns null if GitHub answers with `304 Not Modified`.
+  Future<String?> _request(
+    String method,
+    String path, {
+    Map<String, String> queryParameters = const {},
+    String accept = "application/vnd.github+json",
   }) async {
     final url = _apiBaseUri.resolveUri(
       Uri(path: path, queryParameters: queryParameters),
@@ -101,7 +134,7 @@ class GitHubService {
       final request =
           http.AbortableRequest(method, url, abortTrigger: abort.future)
             ..headers.addAll({
-              "Accept": "application/vnd.github+json",
+              "Accept": accept,
               // https://docs.github.com/en/rest/about-the-rest-api/api-versions?apiVersion=2022-11-28#supported-api-versions
               "X-GitHub-Api-Version": "2022-11-28",
               "User-Agent": userAgent,
@@ -134,7 +167,8 @@ class GitHubService {
       if (response.statusCode >= 300) {
         throw GitHubUnexpectedStatusCode(response.statusCode);
       }
-      return jsonDecode(response.body);
+      // response.body falls back to latin1 if the content type has no charset
+      return utf8.decode(response.bodyBytes);
     }
     throw GitHubRateLimitMaxRetriesExceeded();
   }

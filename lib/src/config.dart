@@ -36,6 +36,21 @@ class SystemIntegrationConfig {
 
   final List<String> desktopCategories;
 
+  /// Asset key of the JSON file with messages shown when upgrading to a
+  /// version. Upgrade messages are disabled if null.
+  ///
+  /// Before installing an update, the file is fetched from the repository at
+  /// the tag of the new version, see [upgradeMessagesRepoPath].
+  final String? upgradeMessagesAsset;
+
+  final String? _upgradeMessagesRepoPath;
+
+  /// Path of [upgradeMessagesAsset] in the GitHub repository. Defaults to
+  /// [upgradeMessagesAsset], which is correct if the app is in the
+  /// repository root.
+  String? get upgradeMessagesRepoPath =>
+      _upgradeMessagesRepoPath ?? upgradeMessagesAsset;
+
   const SystemIntegrationConfig({
     required this.appName,
     required this.executableName,
@@ -45,6 +60,8 @@ class SystemIntegrationConfig {
     required this.desktopId,
     required this.desktopIconAsset,
     required this.desktopCategories,
+    this.upgradeMessagesAsset,
+    this._upgradeMessagesRepoPath,
   });
 
   Uri get releasesUrl => githubWebBaseUri.resolveUri(

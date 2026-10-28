@@ -18,9 +18,14 @@ class InstallUpdateViewModel extends ChangeNotifier {
 
   Future<bool> requestInstallPermission() => _repo.requestInstallPermission();
 
-  Future<void> installUpdate() async {
-    await _repo.update();
-  }
+  /// Returns null if there is no newer version or preparing failed.
+  Future<PendingUpdate?> prepareUpdate() => _repo.prepareUpdate();
+
+  /// Call when the user confirmed the messages of [pending].
+  Future<void> confirmUpgradeMessages(PendingUpdate pending) =>
+      _repo.markUpgradeMessagesShown(pending);
+
+  Future<void> installUpdate(PendingUpdate pending) => _repo.update(pending);
 
   @override
   void dispose() {

@@ -5,16 +5,20 @@ import 'package:flutter_system_integration/src/auto_update/install_update_viewmo
 import 'package:flutter_system_integration/src/log.dart';
 import 'package:flutter_system_integration/src/restart.dart';
 import 'package:flutter_system_integration/src/ui/common.dart';
+import 'package:flutter_system_integration/src/ui/upgrade_messages_dialog.dart';
 import 'package:material_ui/material_ui.dart';
 
 final _log = createLogger("InstallUpdatePage");
 
 /// Downloads and installs the latest version and shows the progress.
 ///
-/// If the platform requires a permission to install the update, an
-/// explanation dialog is shown before the system asks for it.
+/// Upgrade messages of the new version are shown before installing and the
+/// update is only installed if the user confirms them. If the platform
+/// requires a permission to install the update, an explanation dialog is
+/// shown before the system asks for it.
 class InstallUpdatePage extends StatefulWidget {
-  /// Must not be null if [AutoUpdateRepository.autoUpdatesSupported] is true.
+  /// Null if [AutoUpdateRepository.autoUpdatesSupported] is false, then the
+  /// page tells the user that auto updates are not supported.
   final AutoUpdateRepository? autoUpdateRepository;
 
   /// Called when the user wants to exit after a successful update on
@@ -38,13 +42,14 @@ class InstallUpdatePage extends StatefulWidget {
 class _InstallUpdatePageState extends State<InstallUpdatePage> {
   InstallUpdateViewModel? _viewModel;
 
+  bool _installing = false;
+
   @override
   void initState() {
     super.initState();
-    if (AutoUpdateRepository.autoUpdatesSupported) {
-      _viewModel = InstallUpdateViewModel(
-        autoUpdateRepository: widget.autoUpdateRepository!,
-      );
+    final repository = widget.autoUpdateRepository;
+    if (repository != null) {
+      _viewModel = InstallUpdateViewModel(autoUpdateRepository: repository);
     }
   }
 
@@ -55,6 +60,37 @@ class _InstallUpdatePageState extends State<InstallUpdatePage> {
   }
 
   Future<void> _install(InstallUpdateViewModel viewModel) async {
+    if (_installing) return;
+    setState(() => _installing = true);
+    try {
+      await _runInstallSteps(viewModel);
+    } finally {
+      if (mounted) setState(() => _installing = false);
+    }
+  }
+
+  Future<void> _runInstallSteps(InstallUpdateViewModel viewModel) async {
+    final pending = await viewModel.prepareUpdate();
+    if (pending == null) {
+      if (mounted && viewModel.status != AutoUpdateStatus.failure) {
+        widget.showMessage(
+          context,
+          "You are already running the latest version!",
+        );
+      }
+      return;
+    }
+    if (pending.messages.isNotEmpty) {
+      if (!mounted) return;
+      if (!await showUpgradeMessagesDialog(
+        context,
+        pending.messages,
+        confirm: true,
+      )) {
+        return;
+      }
+      await viewModel.confirmUpgradeMessages(pending);
+    }
     try {
       if (await viewModel.needsInstallPermission()) {
         if (!mounted) return;
@@ -74,7 +110,7 @@ class _InstallUpdatePageState extends State<InstallUpdatePage> {
       widget.showMessage(context, "Failed to request install permission!");
       return;
     }
-    await viewModel.installUpdate();
+    await viewModel.installUpdate(pending);
   }
 
   Future<bool?> _showInstallPermissionDialog() => showAdaptiveDialog<bool>(
@@ -167,7 +203,7 @@ class _InstallUpdatePageState extends State<InstallUpdatePage> {
           if (status == AutoUpdateStatus.initial ||
               status == AutoUpdateStatus.failure)
             FilledButton(
-              onPressed: () => _install(viewModel),
+              onPressed: _installing ? null : () => _install(viewModel),
               child: Text(
                 status == AutoUpdateStatus.failure ? "Retry" : "Install",
               ),

@@ -11,7 +11,6 @@ final _log = createLogger("VersionCheckerViewModel");
 class VersionCheckerViewModel extends ChangeNotifier {
   static const String _keyLastDisplayedDialog = "version.last_displayed_dialog";
   static const String _keyIgnoreVersion = "version.ignore_version";
-  static const String _keyCurrentVersion = "version.current";
 
   final KeyValueStore _keyValue;
   final VersionRepository _versionRepo;
@@ -43,16 +42,10 @@ class VersionCheckerViewModel extends ChangeNotifier {
     _checked = true;
 
     _current = await VersionRepository.getCurrentVersion();
-    final prevCurrent = await _keyValue.loadObject(
-      _keyCurrentVersion,
-      Version.fromJson,
-    );
+    final prevCurrent = await VersionRepository.getPreviousVersion(_keyValue);
     if (prevCurrent != null && _current! > prevCurrent) {
       showUpdateSuccessful = true;
       notifyListeners();
-    }
-    if (prevCurrent != _current) {
-      await _keyValue.store(_keyCurrentVersion, _current!);
     }
 
     final lastDisplayed = await _keyValue.loadDateTime(_keyLastDisplayedDialog);

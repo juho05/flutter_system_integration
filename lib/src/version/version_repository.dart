@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_system_integration/src/config.dart';
 import 'package:flutter_system_integration/src/github/github_service.dart';
 import 'package:flutter_system_integration/src/key_value_store.dart';
@@ -11,15 +12,41 @@ class VersionRepository {
   static const _keyLastCheck = "version.last_check";
   static const _keyLatestVersionTag = "version.latest.tag";
   static const _keyLegacyLatestVersion = "version.latest";
+  static const _keyCurrentVersion = "version.current";
   static const _minCheckInterval = Duration(hours: 3);
 
   static Version? _currentVersion;
+  static Future<Version?>? _previousVersion;
 
   static Future<Version> getCurrentVersion() async {
     return _currentVersion ??= Version.parse(
       (await PackageInfo.fromPlatform()).version,
     );
   }
+
+  /// Returns the version of the previous app launch, null on the first
+  /// launch, and records the current version for the next launch.
+  ///
+  /// The result is computed once per process, so all callers see the same
+  /// version.
+  static Future<Version?> getPreviousVersion(KeyValueStore keyValue) =>
+      _previousVersion ??= _loadPreviousVersion(keyValue);
+
+  static Future<Version?> _loadPreviousVersion(KeyValueStore keyValue) async {
+    final current = await getCurrentVersion();
+    final previous = await keyValue.loadObject(
+      _keyCurrentVersion,
+      Version.fromJson,
+    );
+    if (previous != current) {
+      await keyValue.store(_keyCurrentVersion, current);
+    }
+    _log.fine("previous version: $previous, current version: $current");
+    return previous;
+  }
+
+  @visibleForTesting
+  static void resetPreviousVersion() => _previousVersion = null;
 
   final SystemIntegrationConfig _config;
   final GitHubService _github;

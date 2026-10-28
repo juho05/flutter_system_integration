@@ -82,7 +82,7 @@ class _VersionCheckingSettingsPageState
                 Navigator.pop(context, _NewVersionDialogChoice.view),
             child: const Text("View"),
           ),
-          if (AutoUpdateRepository.autoUpdatesSupported &&
+          if (AutoUpdateRepository.autoUpdatesSupported(widget.config) &&
               onInstallUpdate != null)
             AdaptiveDialogAction(
               onPressed: () =>

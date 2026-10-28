@@ -13,6 +13,8 @@ import 'package:flutter_system_integration/src/config.dart';
 import 'package:flutter_system_integration/src/github/github_service.dart';
 import 'package:flutter_system_integration/src/github/http_client.dart';
 import 'package:flutter_system_integration/src/log.dart';
+import 'package:flutter_system_integration/src/upgrade_messages/upgrade_message.dart';
+import 'package:flutter_system_integration/src/upgrade_messages/upgrade_messages_repository.dart';
 import 'package:flutter_system_integration/src/version/version.dart';
 import 'package:flutter_system_integration/src/version/version_repository.dart';
 import 'package:http/http.dart' as http;
@@ -33,18 +35,28 @@ enum AutoUpdateStatus {
   failure,
 }
 
+/// An update resolved by [AutoUpdateRepository.prepareUpdate].
+class PendingUpdate {
+  final String tag;
+
+  /// Messages the user has to confirm before installing, oldest first.
+  final List<UpgradeMessage> messages;
+
+  const PendingUpdate({required this.tag, this.messages = const []});
+}
+
 class AutoUpdateRepository extends ChangeNotifier {
-  static bool get autoUpdatesSupported =>
-      !kIsWeb &&
+  static bool autoUpdatesSupported(SystemIntegrationConfig config) =>
+      !config.versionCheckExternallyDisabled &&
       (Platform.isAndroid ||
           Platform.isWindows ||
           Platform.isMacOS ||
-          AppImageRepository.isAppImage) &&
-      const bool.fromEnvironment("VERSION_CHECK", defaultValue: true);
+          AppImageRepository.isAppImage);
 
   final SystemIntegrationConfig _config;
   final VersionRepository _versionRepository;
   final GitHubService _github;
+  final UpgradeMessagesRepository? _upgradeMessages;
   final http.Client? _http;
 
   late final Updater _updater;
@@ -60,15 +72,23 @@ class AutoUpdateRepository extends ChangeNotifier {
   /// alive when the process exits, e.g. a tray icon. It does not have to exit
   /// the app itself, the app exits once it completes, throws or takes longer
   /// than a few seconds.
+  ///
+  /// Without [upgradeMessagesRepository], no upgrade messages are shown
+  /// before installing.
   AutoUpdateRepository({
     required this._config,
     required this._versionRepository,
     required this._github,
+    UpgradeMessagesRepository? upgradeMessagesRepository,
     http.Client? httpClient,
     Future<void> Function()? beforeExit,
-  }) : _http = httpClient {
+    @visibleForTesting Updater? updater,
+  }) : _upgradeMessages = upgradeMessagesRepository,
+       _http = httpClient {
     final appName = _config.appName;
-    if (Platform.isAndroid) {
+    if (updater != null) {
+      _updater = updater;
+    } else if (Platform.isAndroid) {
       _log.fine("update platform: Android");
       _updater = UpdaterAndroid(appName: appName);
     } else if (Platform.isWindows) {
@@ -94,20 +114,16 @@ class AutoUpdateRepository extends ChangeNotifier {
   Future<bool> requestInstallPermission() =>
       _updater.requestInstallPermission();
 
-  /// Downloads and installs the latest version.
+  /// Resolves the latest version and the upgrade messages to confirm before
+  /// installing it. Returns null if there is no newer version or the update
+  /// can't be started.
   ///
   /// Errors are logged and reflected in [status] instead of being thrown.
-  /// On Windows and macOS the app exits to let the installer run.
-  Future<void> update() async {
-    if (status != AutoUpdateStatus.initial &&
-        status != AutoUpdateStatus.failure) {
-      _log.warning("Cannot start auto update when it's already running.");
-      return;
-    }
+  Future<PendingUpdate?> prepareUpdate() async {
+    if (!_canStart()) return null;
 
-    _log.info("Performing auto update...");
+    _log.info("Preparing auto update...");
     _setStatus(AutoUpdateStatus.checkingVersion);
-
     try {
       final latestVersionTag = await _versionRepository.getLatestVersionTag(
         force: true,
@@ -116,10 +132,34 @@ class AutoUpdateRepository extends ChangeNotifier {
           await VersionRepository.getCurrentVersion() >=
               Version.parse(latestVersionTag)) {
         _setStatus(AutoUpdateStatus.initial);
-        return;
+        return null;
       }
+      final messages =
+          await _upgradeMessages?.fetchMessagesForUpdate(latestVersionTag) ??
+          const [];
+      _setStatus(AutoUpdateStatus.initial);
+      return PendingUpdate(tag: latestVersionTag, messages: messages);
+    } on Object catch (e, st) {
+      _log.severe("Preparing auto update failed", e, st);
+      _setStatus(AutoUpdateStatus.failure);
+      return null;
+    }
+  }
 
-      final file = await _download(latestVersionTag);
+  Future<void> markUpgradeMessagesShown(PendingUpdate pending) async {
+    await _upgradeMessages?.markShown(pending.messages);
+  }
+
+  /// Downloads and installs the version of [pending].
+  ///
+  /// Errors are logged and reflected in [status] instead of being thrown.
+  /// On Windows and macOS the app exits to let the installer run.
+  Future<void> update(PendingUpdate pending) async {
+    if (!_canStart()) return;
+
+    _log.info("Performing auto update to ${pending.tag}...");
+    try {
+      final file = await _download(pending.tag);
 
       _log.fine("Installing ${file.path}...");
       _setStatus(AutoUpdateStatus.installing);
@@ -144,19 +184,29 @@ class AutoUpdateRepository extends ChangeNotifier {
     }
   }
 
+  bool _canStart() {
+    if (status != AutoUpdateStatus.initial &&
+        status != AutoUpdateStatus.failure) {
+      _log.warning("Cannot start auto update when it's already running.");
+      return false;
+    }
+    return true;
+  }
+
   void _setStatus(AutoUpdateStatus status) {
     _status = status;
     notifyListeners();
   }
 
   Future<File> _download(String tag) async {
+    // set before the first await, so the update can't be started twice
+    _downloadProgress.add(0);
+    _setStatus(AutoUpdateStatus.downloading);
+
     final fileNames = await _updater.generateDownloadFileNames(
       Version.parse(tag),
     );
     assert(fileNames.isNotEmpty);
-
-    _downloadProgress.add(0);
-    _setStatus(AutoUpdateStatus.downloading);
 
     final targetDir = Directory(
       path.join(

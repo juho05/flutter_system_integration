@@ -34,6 +34,7 @@ void main() {
   late MockVersionCheckingSettings versionChecking;
 
   setUp(() {
+    VersionRepository.resetPreviousVersion();
     keyValue = MockKeyValueStore();
     versionRepo = MockVersionRepository();
     versionChecking = MockVersionCheckingSettings();

@@ -79,12 +79,31 @@ void main() {
     });
   });
 
-  group('installUpdate', () {
-    test('delegates to repo.update', () async {
-      when(() => repo.update()).thenAnswer((_) async {});
+  group('update steps', () {
+    const pending = PendingUpdate(tag: "v2.0.0");
+
+    test('prepareUpdate delegates to repo', () async {
+      when(() => repo.prepareUpdate()).thenAnswer((_) async => pending);
       final vm = buildViewModel();
-      await vm.installUpdate();
-      verify(() => repo.update()).called(1);
+      expect(await vm.prepareUpdate(), same(pending));
+      vm.dispose();
+    });
+
+    test('confirmUpgradeMessages marks messages shown', () async {
+      when(
+        () => repo.markUpgradeMessagesShown(pending),
+      ).thenAnswer((_) async {});
+      final vm = buildViewModel();
+      await vm.confirmUpgradeMessages(pending);
+      verify(() => repo.markUpgradeMessagesShown(pending)).called(1);
+      vm.dispose();
+    });
+
+    test('installUpdate delegates to repo.update', () async {
+      when(() => repo.update(pending)).thenAnswer((_) async {});
+      final vm = buildViewModel();
+      await vm.installUpdate(pending);
+      verify(() => repo.update(pending)).called(1);
       vm.dispose();
     });
   });
